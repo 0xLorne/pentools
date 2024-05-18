@@ -1,0 +1,25 @@
+get () {
+	downloadsFolder="/home/$USER/Downloads/" 
+	fileD=$(ls -Art $downloadsFolder | tail -n 1) 
+	mv "$downloadsFolder/$fileD" .
+	echo "[+] Getting: $fileD"
+}
+
+mkws () {
+    mkdir -p $1/{recon,creds,exploit,sources}
+}
+
+
+setdoc() {
+	#<REDACTED>
+}
+
+
+doc() {
+	#<REDACTED>
+}
+
+function poff(){
+	#<REDACTED>
+}
+

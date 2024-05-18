@@ -1,0 +1,35 @@
+#!/bin/bash
+if [ -z "$1" ]; then
+  echo "[*] Usage: settarget <IP> <DOMAIN>"
+  exit 2
+else
+  ip="$1"
+
+  if echo "$ip" | grep -Pq '^\d+\.\d+\.\d+\.\d+$'; then
+    if [ -z "$2" ]; then
+      echo "[!] Domain is missing. Please provide a domain."
+      exit 1
+    fi
+
+    domain="$2"
+
+    if [[ "$domain" != *.* ]]; then
+      echo "[!] Domain is not valid: $domain"
+      exit 1
+    fi
+
+    if grep -q "$ip" /etc/hosts; then
+      echo "[!] $ip is already in hosts file."
+      exit 1
+    else
+      echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+      echo "[+] $ip $domain target set."
+    fi
+
+    echo "$ip $domain" > /home/lorne/.config/bin/setTarget/target.txt
+    exit 0
+  else
+    echo "[!] IP is not valid: $ip"
+    exit 1
+  fi
+fi

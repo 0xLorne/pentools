@@ -1,0 +1,22 @@
+targetfile="/home/lorne/.config/bin/setTarget/target.txt"
+
+if [ -f "$targetfile" ]; then
+  ip_to_remove=$(head -n 1 "$targetfile" | cut -d ' ' -f 1)
+
+  if [ -n "$ip_to_remove" ]; then
+    if grep -q "$ip_to_remove" "/etc/hosts"; then
+      sudo sed -i "/$ip_to_remove/d" "/etc/hosts"
+      echo "[+] Hosts file updated."
+    else
+      echo "[!] IP $ip_to_remove not found in /etc/hosts."
+    fi
+  else
+    echo "[!] No IP found."
+    return
+  fi
+
+  echo "[+] Target cleared."
+  echo "" > "$targetfile"
+else
+  echo "[!] $targetfile not found."
+fi

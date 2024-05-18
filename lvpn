@@ -1,0 +1,16 @@
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]
+	then
+		echo "[!] Check your arguments"
+	elif [ "$1" = "0" ]
+	then
+		find ~ -name "*.ovpn" | grep --color=auto -vi "denied" | awk '{print "["NR"]",$0}'
+	else
+		if [ "$1" -lt 1 ]
+		then
+			echo "[!] Check your length"
+		else
+			archivo=$(find ~ -name "*.ovpn" | grep -vi "denied" | awk -v num="$1" 'NR==num {print; exit}') 
+			echo "[+] File used: $archivo"
+			sudo openvpn "$archivo"
+		fi
+	fi

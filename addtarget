@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "[*] Usage: addtarget <DOMAIN> [ip_address]"
+    exit 1
+fi
+
+domain=$1
+
+if [ "$#" -eq 2 ]; then
+    ip_address=$2
+else
+    ip_address=$(awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/ { ip = $1 } END { print ip }' /etc/hosts)
+fi
+
+if grep -q "^$ip_address[[:space:]]*$domain" /etc/hosts; then
+    echo "[!] Domain $domain already exists for IP $ip_address in /etc/hosts"
+else
+    sed -i "/^$ip_address[[:space:]]*/ s/$/ $domain/" /etc/hosts
+    echo "[+] $domain added to $ip_address"
+fi
