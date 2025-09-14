@@ -1,16 +1,257 @@
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]
-	then
-		echo "[!] Check your arguments"
-	elif [ "$1" = "0" ]
-	then
-		find ~ -name "*.ovpn" | grep --color=auto -vi "denied" | awk '{print "["NR"]",$0}'
-	else
-		if [ "$1" -lt 1 ]
-		then
-			echo "[!] Check your length"
-		else
-			archivo=$(find ~ -name "*.ovpn" | grep -vi "denied" | awk -v num="$1" 'NR==num {print; exit}') 
-			echo "[+] File used: $archivo"
-			sudo openvpn "$archivo"
-		fi
-	fi
+#!/bin/bash
+#
+# lvpn - Lanzador de perfiles OpenVPN
+# Versión 2.1 — limpio, sin sort y con columnas alineadas
+#
+
+VERSION="2.1"
+AUTHOR="@0xlorne"
+
+#################################
+# CONFIGURACIÓN
+#################################
+
+SEARCH_DIRS=(
+    "$HOME/Documents"
+    "$HOME/Downloads"
+    "$HOME/vpns"
+    "$HOME/.config/openvpn"
+    "$HOME"
+)
+
+CACHE_FILE="$HOME/.lvpn_cache"
+DIRS_FILE="$HOME/.lvpn_dirs"
+USE_CACHE=true
+
+#################################
+# FUNCIONES
+#################################
+
+banner() {
+    echo "lvpn $VERSION — openvpn listing by $AUTHOR"
+    echo
+}
+
+load_dirs() {
+    if [ -f "$DIRS_FILE" ]; then
+        while IFS= read -r line; do
+            [ -d "$line" ] && SEARCH_DIRS+=("$line")
+        done < "$DIRS_FILE"
+    fi
+}
+
+save_dir() {
+    local dir="$1"
+    grep -qxF "$dir" "$DIRS_FILE" 2>/dev/null || echo "$dir" >> "$DIRS_FILE"
+}
+
+update_cache() {
+    echo "[*] Actualizando caché..."
+    find "${SEARCH_DIRS[@]}" -maxdepth 3 -type f -name "*.ovpn" ! -iname "*denied*" 2>/dev/null \
+        | sort -u > "$CACHE_FILE"
+    echo "[+] Caché actualizada"
+}
+
+load_files() {
+    if [ "$USE_CACHE" = true ] && [ -f "$CACHE_FILE" ]; then
+        mapfile -t ovpn_files < "$CACHE_FILE"
+    else
+        mapfile -t ovpn_files < <(
+            find "${SEARCH_DIRS[@]}" -maxdepth 3 -type f -name "*.ovpn" ! -iname "*denied*" 2>/dev/null \
+            | sort -u
+        )
+    fi
+    sorted=("${ovpn_files[@]}")
+}
+
+shorten_path() {
+    local path="$1"
+    local max="$2"
+    local rel_path="${path/#$HOME/~}"
+
+    if [ "$full_path" = true ]; then
+        echo "$rel_path"
+    else
+        if [ ${#rel_path} -gt $max ]; then
+            echo "…${rel_path: -$((max-1))}"
+        else
+            echo "$rel_path"
+        fi
+    fi
+}
+
+print_wrapped_cell() {
+    local id="$1"
+    local date="$2"
+    local text="$3"
+    local width="$4"
+
+    local first_line=true
+    while [ ${#text} -gt $width ]; do
+        if $first_line; then
+            printf "| %-2d | %-19s | %-*s |\n" "$id" "$date" $width "${text:0:$width}"
+            first_line=false
+        else
+            printf "|    |                     | %-*s |\n" $width "${text:0:$width}"
+        fi
+        text="${text:$width}"
+    done
+    if $first_line; then
+        printf "| %-2d | %-19s | %-*s |\n" "$id" "$date" $width "$text"
+    else
+        printf "|    |                     | %-*s |\n" $width "$text"
+    fi
+}
+
+calc_col_width() {
+    local max_len=0
+    for f in "${sorted[@]}"; do
+        rel="${f/#$HOME/~}"
+        [ ${#rel} -gt $max_len ] && max_len=${#rel}
+    done
+    term_cols=$(tput cols 2>/dev/null || echo 100)
+    col_width=$((term_cols - 30))
+    [ $col_width -gt $max_len ] && col_width=$max_len
+    [ $col_width -lt 30 ] && col_width=30
+}
+
+list_files() {
+    local mode="$1"; shift
+    local files=("$@")
+
+    if [ ${#files[@]} -eq 0 ]; then
+        echo "[!] No se encontraron archivos .ovpn"
+        exit 1
+    fi
+
+    if [ "$mode" = "table" ]; then
+        calc_col_width
+        border=$(printf '─%.0s' $(seq 1 $col_width))
+
+        printf "+----+---------------------+─%s+\n" "$border"
+        printf "| %-2s | %-19s | %-*s |\n" "ID" "Última modif." $col_width "Archivo"
+        printf "+----+---------------------+─%s+\n" "$border"
+
+        for i in "${!files[@]}"; do
+            f="${files[$i]}"
+            mod_date=$(date -r "$f" "+%Y-%m-%d %H:%M" 2>/dev/null || stat -c "%y" "$f" | cut -d'.' -f1)
+            rel="${f/#$HOME/~}"
+
+            if [ "$full_path" = true ]; then
+                print_wrapped_cell $((i+1)) "$mod_date" "$rel" "$col_width"
+            else
+                short=$(shorten_path "$f" "$col_width")
+                printf "| %-2d | %-19s | %-*s |\n" $((i+1)) "$mod_date" $col_width "$short"
+            fi
+        done
+
+        printf "+----+---------------------+─%s+\n" "$border"
+    else
+        for i in "${!files[@]}"; do
+            rel_path="${files[$i]/#$HOME/~}"
+            printf "[%d] %s\n" $((i+1)) "$rel_path"
+        done
+    fi
+}
+
+centralize_files() {
+    local target="$1"
+    local auto="$2"
+
+    if [ -z "$target" ]; then
+        echo "[!] Uso: $0 -c <directorio>"
+        exit 1
+    fi
+    mkdir -p "$target"
+
+    if [ "$auto" != "y" ]; then
+        read -rp "¿Mover todos los perfiles .ovpn a $target? (Y/n): " confirm
+        confirm=${confirm:-Y}
+        [[ ! "$confirm" =~ ^[Yy]$ ]] && { echo "Cancelado"; exit 1; }
+    fi
+
+    for f in "${ovpn_files[@]}"; do
+        mv "$f" "$target"
+    done
+    echo "[+] Archivos movidos a $target"
+    save_dir "$target"
+    echo "[+] Directorio $target añadido a SEARCH_DIRS"
+}
+
+show_help() {
+    banner
+    cat <<EOF
+USAGE:
+    lvpn [OPTIONS] [INDEX]
+
+ARGS:
+    INDEX           Conectar usando el archivo con el número dado (ver listado)
+
+OPTIONS:
+    -l, list        Listado simple
+    -lt, -tl        Tabla truncada
+    -la             Tabla extendida con wrap
+
+    -c, --centralize <dir>   Mover perfiles a un directorio central (pide confirmación)
+    -cy <dir>                Centralizar sin pedir confirmación
+    -u                       Actualizar caché manualmente
+
+    -h, --help      Mostrar esta ayuda
+    -v, --version   Mostrar versión
+EOF
+}
+
+#################################
+# MAIN
+#################################
+
+load_dirs
+
+case "$1" in
+    -u)
+        update_cache
+        ;;
+    -l|list|-lt|-tl|-la)
+        table_mode="plain"
+        full_path=false
+
+        case "$1" in
+            -lt|-tl) table_mode="table"; full_path=false ;;
+            -la)     table_mode="table"; full_path=true  ;;
+            -l|list) table_mode="plain"; full_path=false ;;
+        esac
+        shift
+
+        load_files
+        list_files "$table_mode" "${sorted[@]}"
+        update_cache
+        ;;
+    -c|--centralize)
+        load_files
+        centralize_files "$2" "n"
+        ;;
+    -cy)
+        load_files
+        centralize_files "$2" "y"
+        ;;
+    [0-9]*)
+        load_files
+        if [ "$1" -ge 1 ] && [ "$1" -le ${#ovpn_files[@]} ]; then
+            archivo="${ovpn_files[$(( $1 - 1 ))]}"
+            echo "[+] Usando archivo: $archivo"
+            exec sudo openvpn "$archivo"
+        else
+            echo "[!] Índice inválido. Usa '-l' para ver opciones."
+            exit 1
+        fi
+        ;;
+    -h|--help|"")
+        show_help
+        ;;
+    -v|--version)
+        echo "lvpn $VERSION"
+        ;;
+    *)
+        show_help
+        ;;
+esac
