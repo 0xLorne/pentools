@@ -11,6 +11,7 @@ Mis scripts para facilitar el uso cotidiano de mi maquina
 	- addtarget: Añade nuevos dominios locales a una ip ya existente, sirve para añadir subdominios
 	-setdoc: crea una variable al directorio de documentacion para añadir enlaces importantes
 	-doc: añade documentacion al directorio de documentacion
+	-monitors: gestiona monitores adicionales con xrandr
 ---
 
 ### Funciones:
