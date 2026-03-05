@@ -10,9 +10,47 @@ mkws () {
 }
 
 
+rerun () {
+	local cmd
+	cmd=$(cat /home/$USER/.zsh_history | fzf)  || return
+	eval "$cmd"
+}
+
+
+settoken () {
+	local VAR_NAME="DIGITALOCEAN_TOKEN" 
+	local TMP_TOKEN
+	local CODE
+	printf "[*] Token DO: "
+	read -s TMP_TOKEN
+	echo
+	if [[ -z "$TMP_TOKEN" ]]
+	then
+		echo "[-] Token vacío"
+		return 1
+	fi
+	export "$VAR_NAME=$TMP_TOKEN"
+	unset TMP_TOKEN
+	echo "[+] Token cargado, verificando..."
+	CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+    https://api.digitalocean.com/v2/account) 
+	case "$CODE" in
+		(200) echo "[+] Token válido (API OK)"
+			return 0 ;;
+		(401 | 403) echo "[-] Token inválido ($CODE)"
+			unset DIGITALOCEAN_TOKEN
+			return 1 ;;
+		(*) echo "[!] Respuesta inesperada: $CODE"
+			return 2 ;;
+	esac
+}
+
+
 setdoc() {
 	#<REDACTED>
 }
+
 
 
 doc() {
